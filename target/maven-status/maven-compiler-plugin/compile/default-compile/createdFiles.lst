@@ -1,0 +1,6 @@
+com\example\service\UserService.class
+com\example\servlet\FileServlet.class
+com\example\servlet\LoginServlet.class
+com\example\servlet\LogoutServlet.class
+com\example\model\User.class
+com\example\servlet\RegisterServlet.class
