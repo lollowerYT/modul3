@@ -43,12 +43,14 @@
             <version>0.4</version>
         </dependency>
 
-        <!-- Jackson для работы с JSON (хранение пользователей) -->
+        <!-- PostgreSQL JDBC Driver -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.15.0</version>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.3</version>
         </dependency>
+
+        <!-- Jackson удалён, так как больше не используется -->
     </dependencies>
 
     <build>
