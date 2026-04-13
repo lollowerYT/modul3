@@ -1,22 +1,16 @@
 package com.example.service;
 
 import com.example.model.User;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.util.DatabaseConfig;
 import org.mindrot.jbcrypt.BCrypt;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
+import java.sql.*;
 
 public class UserService {
-    // Файл для хранения пользователей – в каталоге Tomcat
-    private static final String USERS_FILE = System.getProperty("catalina.base") + "/users.json";
     private static UserService instance;
-    private final ConcurrentHashMap<String, User> users = new ConcurrentHashMap<>();
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private UserService() {
-        loadUsers();
+        ensureTableExists();
     }
 
     public static synchronized UserService getInstance() {
@@ -26,52 +20,73 @@ public class UserService {
         return instance;
     }
 
-    private void loadUsers() {
-        File file = new File(USERS_FILE);
-        if (file.exists()) {
-            try {
-                User[] userArray = objectMapper.readValue(file, User[].class);
-                for (User user : userArray) {
-                    users.put(user.getLogin(), user);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+    //Создаёт таблицу users, если её ещё нет.
+    private void ensureTableExists() {
+        String createTableSQL = "CREATE TABLE IF NOT EXISTS users (" +
+                "login VARCHAR(50) PRIMARY KEY," +
+                "password_hash VARCHAR(255) NOT NULL," +
+                "email VARCHAR(100) NOT NULL" +
+                ")";
+        try (Connection conn = DatabaseConfig.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(createTableSQL);
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to ensure users table", e);
         }
     }
 
-    private void saveUsers() {
-        try {
-            objectMapper.writeValue(new File(USERS_FILE), users.values());
-        } catch (IOException e) {
+     //Регистрирует нового пользователя.
+    public synchronized boolean register(String login, String password, String email) {
+        // Проверка существования логина
+        String checkSql = "SELECT login FROM users WHERE login = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+            checkStmt.setString(1, login);
+            ResultSet rs = checkStmt.executeQuery();
+            if (rs.next()) {
+                return false;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        // Хеширование пароля и вставка
+        String hashed = BCrypt.hashpw(password, BCrypt.gensalt());
+        String insertSql = "INSERT INTO users (login, password_hash, email) VALUES (?, ?, ?)";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
+            insertStmt.setString(1, login);
+            insertStmt.setString(2, hashed);
+            insertStmt.setString(3, email);
+            insertStmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+     //Проверяет учётные данные пользователя.
+    public synchronized User authenticate(String login, String password) {
+        String sql = "SELECT login, password_hash, email FROM users WHERE login = ?";
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, login);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                String hash = rs.getString("password_hash");
+                if (BCrypt.checkpw(password, hash)) {
+                    return new User(
+                            rs.getString("login"),
+                            hash,
+                            rs.getString("email")
+                    );
+                }
+            }
+        } catch (SQLException e) {
             e.printStackTrace();
         }
-    }
-
-    public void reloadUsers() {
-        users.clear();
-        loadUsers();
-    }
-
-    public synchronized boolean register(String login, String password, String email) {
-        reloadUsers();                     // загружаем свежие данные
-        if (users.containsKey(login)) {
-            return false;                  // такой логин уже занят
-        }
-        String hashed = BCrypt.hashpw(password, BCrypt.gensalt());
-        User user = new User(login, hashed, email);
-        users.put(login, user);
-        saveUsers();                       // сохраняем обновлённый список в JSON
-        return true;
-    }
-
-    public synchronized User authenticate(String login, String password) {
-        reloadUsers();
-        User user = users.get(login);
-        if (user == null) {
-            return null;
-        }
-        boolean match = BCrypt.checkpw(password, user.getPasswordHash());
-        return match ? user : null;
+        return null;
     }
 }
