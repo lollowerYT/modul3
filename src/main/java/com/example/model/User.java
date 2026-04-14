@@ -1,14 +1,24 @@
 package com.example.model;
 
+import jakarta.persistence.*;
 import java.io.Serializable;
 
+@Entity
+@Table(name = "users")
 public class User implements Serializable {
+
+    @Id
+    @Column(name = "login", length = 50)
     private String login;
-    private String passwordHash; // хранится BCrypt-хеш
+
+    @Column(name = "password_hash", nullable = false, length = 255)
+    private String passwordHash;
+
+    @Column(name = "email", nullable = false, length = 100)
     private String email;
 
-    public User() {
-    }
+    // Конструкторы
+    public User() {}
 
     public User(String login, String passwordHash, String email) {
         this.login = login;
@@ -16,27 +26,7 @@ public class User implements Serializable {
         this.email = email;
     }
 
-    public String getLogin() {
-        return login;
-    }
-
-    public void setLogin(String login) {
-        this.login = login;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    // Геттеры и сеттеры
+    public String getLogin() { return login; }
+    public String getPasswordHash() { return passwordHash; }
 }

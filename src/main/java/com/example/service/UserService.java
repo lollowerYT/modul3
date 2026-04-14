@@ -1,17 +1,17 @@
 package com.example.service;
 
 import com.example.model.User;
-import com.example.util.DatabaseConfig;
+import com.example.util.HibernateUtil;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityTransaction;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.TypedQuery;
 import org.mindrot.jbcrypt.BCrypt;
-
-import java.sql.*;
 
 public class UserService {
     private static UserService instance;
 
-    private UserService() {
-        ensureTableExists();
-    }
+    private UserService() {}
 
     public static synchronized UserService getInstance() {
         if (instance == null) {
@@ -20,73 +20,57 @@ public class UserService {
         return instance;
     }
 
-    //Создаёт таблицу users, если её ещё нет.
-    private void ensureTableExists() {
-        String createTableSQL = "CREATE TABLE IF NOT EXISTS users (" +
-                "login VARCHAR(50) PRIMARY KEY," +
-                "password_hash VARCHAR(255) NOT NULL," +
-                "email VARCHAR(100) NOT NULL" +
-                ")";
-        try (Connection conn = DatabaseConfig.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(createTableSQL);
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to ensure users table", e);
-        }
-    }
-
      //Регистрирует нового пользователя.
-    public synchronized boolean register(String login, String password, String email) {
-        // Проверка существования логина
-        String checkSql = "SELECT login FROM users WHERE login = ?";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
-            checkStmt.setString(1, login);
-            ResultSet rs = checkStmt.executeQuery();
-            if (rs.next()) {
-                return false;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+    public boolean register(String login, String password, String email) {
+        EntityManager em = HibernateUtil.getEntityManagerFactory().createEntityManager();
+        EntityTransaction tx = em.getTransaction();
+        try {
+            tx.begin();
 
-        // Хеширование пароля и вставка
-        String hashed = BCrypt.hashpw(password, BCrypt.gensalt());
-        String insertSql = "INSERT INTO users (login, password_hash, email) VALUES (?, ?, ?)";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
-            insertStmt.setString(1, login);
-            insertStmt.setString(2, hashed);
-            insertStmt.setString(3, email);
-            insertStmt.executeUpdate();
+            // Проверка существования
+            TypedQuery<Long> query = em.createQuery(
+                    "SELECT COUNT(u) FROM User u WHERE u.login = :login", Long.class);
+            query.setParameter("login", login);
+            if (query.getSingleResult() > 0) {
+                return false; // логин занят
+            }
+
+            // Хеширование пароля и создание пользователя
+            String hashed = BCrypt.hashpw(password, BCrypt.gensalt());
+            User user = new User(login, hashed, email);
+            em.persist(user);
+
+            tx.commit();
             return true;
-        } catch (SQLException e) {
+        } catch (Exception e) {
+            if (tx.isActive()) tx.rollback();
             e.printStackTrace();
             return false;
+        } finally {
+            em.close();
         }
     }
 
-     //Проверяет учётные данные пользователя.
-    public synchronized User authenticate(String login, String password) {
-        String sql = "SELECT login, password_hash, email FROM users WHERE login = ?";
-        try (Connection conn = DatabaseConfig.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, login);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                String hash = rs.getString("password_hash");
-                if (BCrypt.checkpw(password, hash)) {
-                    return new User(
-                            rs.getString("login"),
-                            hash,
-                            rs.getString("email")
-                    );
-                }
+     //Аутентификация пользователя.
+    public User authenticate(String login, String password) {
+        EntityManager em = HibernateUtil.getEntityManagerFactory().createEntityManager();
+        try {
+            TypedQuery<User> query = em.createQuery(
+                    "SELECT u FROM User u WHERE u.login = :login", User.class);
+            query.setParameter("login", login);
+            User user = query.getSingleResult(); // может выбросить NoResultException
+
+            if (BCrypt.checkpw(password, user.getPasswordHash())) {
+                return user;
             }
-        } catch (SQLException e) {
+            return null;
+        } catch (NoResultException e) {
+            return null; // пользователь не найден
+        } catch (Exception e) {
             e.printStackTrace();
+            return null;
+        } finally {
+            em.close();
         }
-        return null;
     }
 }

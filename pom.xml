@@ -36,21 +36,26 @@
             <version>3.0.1</version>
         </dependency>
 
-        <!-- BCrypt для хеширования паролей -->
+        <!-- BCrypt -->
         <dependency>
             <groupId>org.mindrot</groupId>
             <artifactId>jbcrypt</artifactId>
             <version>0.4</version>
         </dependency>
 
-        <!-- PostgreSQL JDBC Driver -->
+        <!-- Hibernate Core (JPA реализация) -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>6.4.0.Final</version>
+        </dependency>
+
+        <!-- PostgreSQL JDBC Driver (нужен Hibernate для работы с PostgreSQL) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>42.7.3</version>
         </dependency>
-
-        <!-- Jackson удалён, так как больше не используется -->
     </dependencies>
 
     <build>
